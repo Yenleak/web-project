@@ -1,9 +1,9 @@
 Project name: TaskFlow
 
 Team Members:
--Sailaukhan Yenglik
--Yessirkep Ainiddin
--Saparkhan Sanzhar
+- Sailaukhan Yenglik
+- Yessirkep Ainiddin
+- Saparkhan Sanzhar
 
 
 Project Description:
