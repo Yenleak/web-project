@@ -1,9 +1,9 @@
 Project name: TaskFlow
 
 Team Members:
-Sailaukhan Yenglik
-Yessirkep Ainiddin
-Saparkhan Sanzhar
+-Sailaukhan Yenglik
+-Yessirkep Ainiddin
+-Saparkhan Sanzhar
 
 
 Project Description:
@@ -32,7 +32,7 @@ Main Features:
 - Task filtering by status
 - Task search by title
 - Comments for tasks
-- Objects linked to authenticated user (`request.user`) 
+- Objects linked to authenticated user 
 
 
 
