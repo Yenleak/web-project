@@ -1,4 +1,7 @@
-Project name: TaskFlow
+<div align="center">
+  <h1>📋 TaskFlow</h1>
+  <p><b>Your Personal Navigator to Peak Productivity</b></p>
+</div> 
 
 Team Members:
 - Sailaukhan Yenglik
