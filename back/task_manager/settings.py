@@ -1,11 +1,15 @@
+# task_manager/settings.py  — ПОЛНЫЙ ФАЙЛ
+
 from pathlib import Path
 from datetime import timedelta
 import os
+from dotenv import load_dotenv # <-- Добавили импорт
 
-#  Базовые пути проекта
 BASE_DIR = Path(__file__).resolve().parent.parent
+# Указываем путь на папку выше (back), где лежит твой .env
+env_path = BASE_DIR.parent / ".env"
+load_dotenv(env_path)
 
-# Секретный ключ и хосты (в будущем здесь будет .env)
 SECRET_KEY = os.getenv("SECRET_KEY")
 DEBUG = True
 ALLOWED_HOSTS = ["*"]
@@ -21,11 +25,13 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     
-    # Пакеты для API и авторизации
     "rest_framework",
     "rest_framework_simplejwt",
     "rest_framework_simplejwt.token_blacklist",
     
+    "django_apscheduler",
+    
+    "core",
 ]
  
 MIDDLEWARE = [
@@ -58,8 +64,6 @@ TEMPLATES = [
 
 WSGI_APPLICATION = "task_manager.wsgi.application"
 
-# ── База данных ───────────────────────────────────────────────────────────
-# Управление подключением к БД
 DATABASES = {
     "default": {
         "ENGINE": "django.db.backends.sqlite3",
@@ -67,12 +71,8 @@ DATABASES = {
     }
 }
 
-# ── Кастомная модель пользователя ─────────────────────────────────────────
-# Указание на новую модель юзера
 AUTH_USER_MODEL = "core.CustomUser"
 
-# ── Валидация паролей ─────────────────────────────────────────────────────
-#  Правила сложности паролей
 AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.UserAttributeSimilarityValidator"},
     {"NAME": "django.contrib.auth.password_validation.MinimumLengthValidator"},
@@ -80,8 +80,15 @@ AUTH_PASSWORD_VALIDATORS = [
     {"NAME": "django.contrib.auth.password_validation.NumericPasswordValidator"},
 ]
 
-# DRF + JWT
-# Глобальные настройки доступа и токенов
+# ── Локализация ───────────────────────────────────────────────────────────
+LANGUAGE_CODE = "ru-ru"
+TIME_ZONE     = "Asia/Almaty"
+USE_I18N      = True
+USE_TZ        = True
+
+STATIC_URL = "static/"
+DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+
 REST_FRAMEWORK = {
     "DEFAULT_AUTHENTICATION_CLASSES": [
         "rest_framework_simplejwt.authentication.JWTAuthentication",
@@ -98,3 +105,18 @@ SIMPLE_JWT = {
     "BLACKLIST_AFTER_ROTATION": True,
     "AUTH_HEADER_TYPES":        ("Bearer",),
 }
+
+# ── Email ───────────────────────────────────────
+EMAIL_BACKEND      = "django.core.mail.backends.console.EmailBackend" # Заменить на smtp в проде
+EMAIL_HOST         = "smtp.gmail.com"
+EMAIL_PORT         = 587
+EMAIL_USE_TLS      = True
+EMAIL_HOST_USER    = "taskflow872@gmail.com"
+EMAIL_HOST_PASSWORD = "0584 5671"   # код от гугл нужно создать env перенести этот пароль туда и использовать python-dotenv
+DEFAULT_FROM_EMAIL = "taskflow872@gmail.com"
+EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER")
+EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD")
+
+# ── APScheduler ───────────────────────────────────────────────────────────
+APSCHEDULER_DATETIME_FORMAT = "N j, Y, f:s a"
+APSCHEDULER_RUN_NOW_TIMEOUT = 25
