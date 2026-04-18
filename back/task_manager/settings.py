@@ -107,13 +107,13 @@ SIMPLE_JWT = {
 }
 
 # ── Email ───────────────────────────────────────
-EMAIL_BACKEND      = "django.core.mail.backends.console.EmailBackend" # Заменить на smtp в проде
+EMAIL_BACKEND      = "django.core.mail.backends.smtp.EmailBackend" # Заменить на smtp в проде
 EMAIL_HOST         = "smtp.gmail.com"
 EMAIL_PORT         = 587
 EMAIL_USE_TLS      = True
-EMAIL_HOST_USER    = "taskflow872@gmail.com"
-EMAIL_HOST_PASSWORD = "0584 5671"   # код от гугл нужно создать env перенести этот пароль туда и использовать python-dotenv
-DEFAULT_FROM_EMAIL = "taskflow872@gmail.com"
+# EMAIL_HOST_USER    = "taskflow872@gmail.com"
+# EMAIL_HOST_PASSWORD = "0584 5671"   # код от гугл нужно создать env перенести этот пароль туда и использовать python-dotenv
+DEFAULT_FROM_EMAIL = EMAIL_HOST_USER
 EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER")
 EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD")
 
