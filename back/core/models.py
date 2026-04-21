@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, PermissionsMixin
 from django.db import models
 from django.utils import timezone
@@ -29,16 +30,16 @@ class CustomUserManager(BaseUserManager):
 # Авторизация по email вместо username
 # ─────────────────────────────────────────────
 class CustomUser(AbstractBaseUser, PermissionsMixin):
-    name  = models.CharField(max_length=150)
+    name = models.CharField(max_length=150)
     email = models.EmailField(unique=True)
 
     is_active = models.BooleanField(default=True)
-    is_staff  = models.BooleanField(default=False)
+    is_staff = models.BooleanField(default=False)
 
     objects = CustomUserManager()
 
     # Используем email как логин
-    USERNAME_FIELD  = "email"
+    USERNAME_FIELD = "email"
     REQUIRED_FIELDS = ["name"]
 
     def __str__(self):
@@ -49,13 +50,13 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
 # Модель 2: Рабочее пространство (Workspace) sanzhar
 # ─────────────────────────────────────────────
 class Workspace(models.Model):
-    name     = models.CharField(max_length=255)
-    creator  = models.ForeignKey(
+    name = models.CharField(max_length=255)
+    creator = models.ForeignKey(
         CustomUser,
         on_delete=models.CASCADE,
         related_name="created_workspaces"   # user.created_workspaces.all()
     )
-    members  = models.ManyToManyField(
+    members = models.ManyToManyField(
         CustomUser,
         related_name="workspaces",          # user.workspaces.all()
         blank=True
@@ -76,14 +77,23 @@ class Task(models.Model):
         ("high",   "Высокий"),
     ]
 
-    title        = models.CharField(max_length=255)
-    description  = models.CharField(max_length=200, blank=True)  # max 200 символов
-    deadline     = models.DateField(null=True, blank=True)
-    priority     = models.CharField(max_length=10, choices=PRIORITY_CHOICES, default="medium")
+    title = models.CharField(max_length=255)
+    description = models.CharField(
+        max_length=200, blank=True)  # max 200 символов
+    deadline = models.DateField(null=True, blank=True)
+    priority = models.CharField(
+        max_length=10, choices=PRIORITY_CHOICES, default="medium")
     is_completed = models.BooleanField(default=False)
-    completed_at = models.DateTimeField(null=True, blank=True)   # заполняется автоматически
-
-    owner     = models.ForeignKey(
+    completed_at = models.DateTimeField(
+        null=True, blank=True)   # заполняется автоматически
+    # Исполнитель задачи (тот, в чью статистику она пойдет)
+    assigned_to = models.ForeignKey(
+        settings.AUTH_USER_MODEL,  # Связь с  CustomUser
+        on_delete=models.CASCADE,  # Если удалят юзера, удалятся его задачи
+        related_name='assigned_tasks',
+        null=True, blank=True
+    )
+    owner = models.ForeignKey(
         CustomUser,
         on_delete=models.CASCADE,
         related_name="tasks"
@@ -107,15 +117,15 @@ class Task(models.Model):
         elif not self.is_completed:
             self.completed_at = None
         super().save(*args, **kwargs)
- 
+
 
 # ─────────────────────────────────────────────
 # Модель 4: Подзадача (Subtask)
 # ─────────────────────────────────────────────
 class Subtask(models.Model):
-    title        = models.CharField(max_length=255)
+    title = models.CharField(max_length=255)
     is_completed = models.BooleanField(default=False)
-    task         = models.ForeignKey(
+    task = models.ForeignKey(
         Task,
         on_delete=models.CASCADE,
         related_name="subtasks"             # task.subtasks.all()

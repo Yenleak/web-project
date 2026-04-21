@@ -1,5 +1,3 @@
-# core/serializers.py
-
 from rest_framework import serializers
 from django.contrib.auth import get_user_model
 from .models import Workspace, Task, Subtask
@@ -14,7 +12,7 @@ class RegisterSerializer(serializers.ModelSerializer):
     password = serializers.CharField(write_only=True, min_length=8)
 
     class Meta:
-        model  = User
+        model = User
         fields = ["id", "name", "email", "password"]
 
     def create(self, validated_data):
@@ -25,7 +23,7 @@ class RegisterSerializer(serializers.ModelSerializer):
 class UserShortSerializer(serializers.ModelSerializer):
     """Лёгкое представление пользователя для вложенных объектов."""
     class Meta:
-        model  = User
+        model = User
         fields = ["id", "name", "email"]
 
 
@@ -34,8 +32,8 @@ class UserShortSerializer(serializers.ModelSerializer):
 # ─────────────────────────────────────────────
 class SubtaskSerializer(serializers.ModelSerializer):
     class Meta:
-        model  = Subtask
-        fields = ["id", "title", "is_completed", "task"]
+        model = Subtask
+        fields = ["id", "task", "title", "is_completed"]
         # task не включаем — он берётся из контекста родительской Task
 
 
@@ -43,17 +41,18 @@ class SubtaskSerializer(serializers.ModelSerializer):
 # Задача
 # ─────────────────────────────────────────────
 class TaskSerializer(serializers.ModelSerializer):
-    # Вложенные подзадачи (read-only список)
+    assigned_to_name = serializers.ReadOnlyField(source='assigned_to.name')
+    workspace_name = serializers.ReadOnlyField(source='workspace.name')
     subtasks = SubtaskSerializer(many=True, read_only=True)
-    # owner выводим как имя, а не PK
-    owner    = UserShortSerializer(read_only=True)
 
     class Meta:
-        model  = Task
+        model = Task
         fields = [
             "id", "title", "description", "deadline",
             "priority", "is_completed", "completed_at",
-            "owner", "workspace", "subtasks", "created_at",
+            "owner", "assigned_to", "assigned_to_name",  # Добавь это
+            "workspace", "workspace_name", "subtasks",   # Добавь это
+            "created_at",
         ]
         read_only_fields = ["completed_at", "created_at", "owner"]
 
@@ -63,17 +62,30 @@ class TaskCreateSerializer(serializers.ModelSerializer):
     Отдельный сериализатор для создания/обновления задачи.
     owner выставляется во view через perform_create, а не через запрос.
     """
+
     class Meta:
-        model  = Task
+        model = Task
         fields = [
             "id", "title", "description", "deadline",
-            "priority", "is_completed", "workspace",
+            "priority", "is_completed", "workspace", "assigned_to"
         ]
 
+    def validate(self, data):
+        workspace = data.get('workspace')
+        assigned_to = data.get('assigned_to')
+
+        if workspace and assigned_to:
+            if not workspace.members.filter(id=assigned_to.id).exists():
+                raise serializers.ValidationError({
+                    "assigned_to": "Вы не можете назначить задачу пользователю, которого нет в этом воркспейсе."
+                })
+        return data
 
 # ─────────────────────────────────────────────
 # Workspace
 # ─────────────────────────────────────────────
+
+
 class WorkspaceSerializer(serializers.ModelSerializer):
     creator = UserShortSerializer(read_only=True)
     members = UserShortSerializer(many=True, read_only=True)
@@ -87,7 +99,7 @@ class WorkspaceSerializer(serializers.ModelSerializer):
     )
 
     class Meta:
-        model  = Workspace
+        model = Workspace
         fields = ["id", "name", "creator", "members", "member_ids", "deadline"]
 
     def create(self, validated_data):
@@ -110,8 +122,8 @@ class AddMembersSerializer(serializers.Serializer):
 # Статистика
 # ─────────────────────────────────────────────
 class StatisticsSerializer(serializers.Serializer):
-    total_tasks         = serializers.IntegerField()
-    completed_on_time   = serializers.IntegerField()
-    completed_overdue   = serializers.IntegerField()
-    pending             = serializers.IntegerField()
+    total_tasks = serializers.IntegerField()
+    completed_on_time = serializers.IntegerField()
+    completed_overdue = serializers.IntegerField()
+    pending = serializers.IntegerField()
     completion_rate_pct = serializers.FloatField()
