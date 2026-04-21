@@ -1,13 +1,11 @@
-# task_manager/settings.py  — ПОЛНЫЙ ФАЙЛ
-
 from pathlib import Path
 from datetime import timedelta
 import os
-from dotenv import load_dotenv # <-- Добавили импорт
+from dotenv import load_dotenv  # <-- Добавили импорт
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 # Указываем путь на папку выше (back), где лежит твой .env
-env_path = BASE_DIR.parent / ".env"
+env_path = BASE_DIR / ".env"
 load_dotenv(env_path)
 
 SECRET_KEY = os.getenv("SECRET_KEY")
@@ -24,16 +22,16 @@ INSTALLED_APPS = [
     "django.contrib.sessions",
     "django.contrib.messages",
     "django.contrib.staticfiles",
-    
+
     "rest_framework",
     "rest_framework_simplejwt",
     "rest_framework_simplejwt.token_blacklist",
-    
+
     "django_apscheduler",
-    
+
     "core",
 ]
- 
+
 MIDDLEWARE = [
     "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
@@ -82,9 +80,9 @@ AUTH_PASSWORD_VALIDATORS = [
 
 # ── Локализация ───────────────────────────────────────────────────────────
 LANGUAGE_CODE = "ru-ru"
-TIME_ZONE     = "Asia/Almaty"
-USE_I18N      = True
-USE_TZ        = True
+TIME_ZONE = "Asia/Almaty"
+USE_I18N = True
+USE_TZ = True
 
 STATIC_URL = "static/"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
@@ -107,16 +105,17 @@ SIMPLE_JWT = {
 }
 
 # ── Email ───────────────────────────────────────
-EMAIL_BACKEND      = "django.core.mail.backends.smtp.EmailBackend" # Заменить на smtp в проде
-EMAIL_HOST         = "smtp.gmail.com"
-EMAIL_PORT         = 587
-EMAIL_USE_TLS      = True
+# Заменить на smtp в проде
+EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+EMAIL_HOST = "smtp.gmail.com"
+EMAIL_PORT = 465
+EMAIL_USE_TLS = False
+EMAIL_USE_SSL = True
 # EMAIL_HOST_USER    = "taskflow872@gmail.com"
 # EMAIL_HOST_PASSWORD = "0584 5671"   # код от гугл нужно создать env перенести этот пароль туда и использовать python-dotenv
-DEFAULT_FROM_EMAIL = EMAIL_HOST_USER
 EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER")
 EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD")
-
+DEFAULT_FROM_EMAIL = EMAIL_HOST_USER
 # ── APScheduler ───────────────────────────────────────────────────────────
 APSCHEDULER_DATETIME_FORMAT = "N j, Y, f:s a"
 APSCHEDULER_RUN_NOW_TIMEOUT = 25
