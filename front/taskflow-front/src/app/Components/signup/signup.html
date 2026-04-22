@@ -1,1 +1,22 @@
-<p>signup works!</p>
+<div class="auth-container">
+  <div class="auth-card">
+    <h2>Регистрация</h2>
+
+    <div class="error" *ngIf="error">{{ error }}</div>
+
+    <form (ngSubmit)="onSignup()">
+      <label>Имя</label>
+      <input type="text" [(ngModel)]="name" name="name" placeholder="Ваше имя" required />
+
+      <label>Email</label>
+      <input type="email" [(ngModel)]="email" name="email" placeholder="you@example.com" required />
+
+      <label>Пароль</label>
+      <input type="password" [(ngModel)]="password" name="password" placeholder="••••••••" required />
+
+      <button type="submit">Создать аккаунт</button>
+    </form>
+
+    <p>Уже есть аккаунт? <a routerLink="/login">Войти</a></p>
+  </div>
+</div>
