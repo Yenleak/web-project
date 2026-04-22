@@ -1,1 +1,59 @@
-<p>tasks works!</p>
+<div class="tasks-container">
+  <div class="tasks-header">
+    <h1>Мои задачи</h1>
+    <button (click)="showForm = !showForm">+ Новая задача</button>
+  </div>
+
+  <div class="error" *ngIf="error">{{ error }}</div>
+
+  <!-- Форма создания -->
+  <div class="task-form" *ngIf="showForm">
+    <input [(ngModel)]="newTask.title" name="title" placeholder="Название задачи" />
+    <input [(ngModel)]="newTask.description" name="description" placeholder="Описание" />
+    <input [(ngModel)]="newTask.deadline" name="deadline" type="date" />
+    <select [(ngModel)]="newTask.priority" name="priority">
+      <option value="low">Низкий</option>
+      <option value="medium">Средний</option>
+      <option value="high">Высокий</option>
+    </select>
+    <button (click)="createTask()">Создать</button>
+    <button (click)="showForm = false">Отмена</button>
+  </div>
+
+  <!-- Список задач -->
+  <div class="task-list">
+    @for (task of tasks; track task.id) {
+      <div class="task-card" [class.completed]="task.is_completed" [class.overdue]="isOverdue(task)" (click)="openTask(task.id)">
+
+        <div class="task-overdue-badge" *ngIf="isOverdue(task)">
+          ⚠️ Просрочено!
+        </div>
+
+        <div class="task-top">
+          <span class="task-title">{{ task.title }}</span>
+          <span class="priority" [class]="task.priority">{{ task.priority }}</span>
+        </div>
+
+        <p class="task-desc" *ngIf="task.description">{{ task.description }}</p>
+
+        <div class="task-bottom">
+          <span *ngIf="task.deadline">📅 {{ task.deadline }}</span>
+          <span *ngIf="task.subtasks.length > 0">
+            ✅ {{ task.subtasks.length }} подзадач
+          </span>
+          <div class="task-actions">
+            <button (click)="toggleTask(task.id, $event)">
+              {{ task.is_completed ? 'Отменить' : 'Выполнено' }}
+            </button>
+            <button class="delete-btn" (click)="deleteTask(task.id, $event)">🗑</button>
+          </div>
+        </div>
+
+      </div>
+    } @empty {
+      <div class="empty-state">
+        <p>Задач пока нет. Создайте первую!</p>
+      </div>
+    }
+  </div>
+</div>
