@@ -1,129 +1,80 @@
+from django.contrib.auth.models import User
+from django.contrib.auth import authenticate
 from rest_framework import serializers
-from django.contrib.auth import get_user_model
-from .models import Workspace, Task, Subtask
-
-User = get_user_model()
+from .models import Workspace, WorkspaceMember, Task, SubTask, TaskActivity, UserStats
 
 
-# ─────────────────────────────────────────────
-# Пользователь
-# ─────────────────────────────────────────────
-class RegisterSerializer(serializers.ModelSerializer):
-    password = serializers.CharField(write_only=True, min_length=8)
-
-    class Meta:
-        model = User
-        fields = ["id", "name", "email", "password"]
+class RegisterSerializer(serializers.Serializer):
+    username = serializers.CharField(max_length=150)
+    password = serializers.CharField(write_only=True)
+    email = serializers.EmailField(required=False,allow_blank=True)
 
     def create(self, validated_data):
-        # Используем наш кастомный менеджер, чтобы пароль хэшировался
-        return User.objects.create_user(**validated_data)
+        user = User.objects.create_user(
+            username=validated_data['username'],
+            password=validated_data['password'],
+            email=validated_data.get('email', '')
+        )
+        return user
 
 
-class UserShortSerializer(serializers.ModelSerializer):
-    """Лёгкое представление пользователя для вложенных объектов."""
-    class Meta:
-        model = User
-        fields = ["id", "name", "email"]
+class LoginSerializer(serializers.Serializer):
+    username = serializers.CharField()
+    password = serializers.CharField(write_only=True)
 
-
-# ─────────────────────────────────────────────
-# Подзадача
-# ─────────────────────────────────────────────
-class SubtaskSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Subtask
-        fields = ["id", "task", "title", "is_completed"]
-        # task не включаем — он берётся из контекста родительской Task
-
-
-# ─────────────────────────────────────────────
-# Задача
-# ─────────────────────────────────────────────
-class TaskSerializer(serializers.ModelSerializer):
-    assigned_to_name = serializers.ReadOnlyField(source='assigned_to.name')
-    workspace_name = serializers.ReadOnlyField(source='workspace.name')
-    subtasks = SubtaskSerializer(many=True, read_only=True)
-
-    class Meta:
-        model = Task
-        fields = [
-            "id", "title", "description", "deadline",
-            "priority", "is_completed", "completed_at",
-            "owner", "assigned_to", "assigned_to_name",  # Добавь это
-            "workspace", "workspace_name", "subtasks",   # Добавь это
-            "created_at",
-        ]
-        read_only_fields = ["completed_at", "created_at", "owner"]
-
-
-class TaskCreateSerializer(serializers.ModelSerializer):
-    """
-    Отдельный сериализатор для создания/обновления задачи.
-    owner выставляется во view через perform_create, а не через запрос.
-    """
-
-    class Meta:
-        model = Task
-        fields = [
-            "id", "title", "description", "deadline",
-            "priority", "is_completed", "workspace", "assigned_to"
-        ]
-
-    def validate(self, data):
-        workspace = data.get('workspace')
-        assigned_to = data.get('assigned_to')
-
-        if workspace and assigned_to:
-            if not workspace.members.filter(id=assigned_to.id).exists():
-                raise serializers.ValidationError({
-                    "assigned_to": "Вы не можете назначить задачу пользователю, которого нет в этом воркспейсе."
-                })
-        return data
-
-# ─────────────────────────────────────────────
-# Workspace
-# ─────────────────────────────────────────────
+    def validate(self, attrs):
+        user = authenticate(username=attrs['username'], password=attrs['password'])
+        if not user:
+            raise serializers.ValidationError('Invalid username or password')
+        attrs['user'] = user
+        return attrs
 
 
 class WorkspaceSerializer(serializers.ModelSerializer):
-    creator = UserShortSerializer(read_only=True)
-    members = UserShortSerializer(many=True, read_only=True)
-    # Поле для записи: принимает список ID пользователей
-    member_ids = serializers.PrimaryKeyRelatedField(
-        many=True,
-        queryset=User.objects.all(),
-        write_only=True,
-        required=False,
-        source="members"        # маппим на поле members модели
-    )
+    created_by = serializers.ReadOnlyField(source='created_by.username')
 
     class Meta:
         model = Workspace
-        fields = ["id", "name", "creator", "members", "member_ids", "deadline"]
-
-    def create(self, validated_data):
-        # Извлекаем members отдельно, так как M2M нельзя передать в create()
-        members = validated_data.pop("members", [])
-        workspace = Workspace.objects.create(**validated_data)
-        workspace.members.set(members)
-        return workspace
+        fields = '__all__'
 
 
-class AddMembersSerializer(serializers.Serializer):
-    """Для эндпоинта добавления участников в воркспейс."""
-    user_ids = serializers.PrimaryKeyRelatedField(
-        many=True,
-        queryset=User.objects.all()
-    )
+class WorkspaceMemberSerializer(serializers.ModelSerializer):
+    user_username = serializers.ReadOnlyField(source='user.username')
+    added_by_username = serializers.ReadOnlyField(source='added_by.username')
+
+    class Meta:
+        model = WorkspaceMember
+        fields = '__all__'
 
 
-# ─────────────────────────────────────────────
-# Статистика
-# ─────────────────────────────────────────────
-class StatisticsSerializer(serializers.Serializer):
-    total_tasks = serializers.IntegerField()
-    completed_on_time = serializers.IntegerField()
-    completed_overdue = serializers.IntegerField()
-    pending = serializers.IntegerField()
-    completion_rate_pct = serializers.FloatField()
+class SubTaskSerializer(serializers.ModelSerializer):
+    created_by = serializers.ReadOnlyField(source='created_by.username')
+    completed_by = serializers.ReadOnlyField(source='completed_by.username')
+
+    class Meta:
+        model = SubTask
+        fields = '__all__'
+
+
+class TaskSerializer(serializers.ModelSerializer):
+    created_by = serializers.ReadOnlyField(source='created_by.username')
+    completed_by = serializers.ReadOnlyField(source='completed_by.username')
+    subtasks = SubTaskSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = Task
+        fields = '__all__'
+
+
+class TaskActivitySerializer(serializers.ModelSerializer):
+    user_username = serializers.ReadOnlyField(source='user.username')
+
+    class Meta:
+        model = TaskActivity
+        fields = '__all__'
+
+
+class UserStatsSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = UserStats
+        fields = '__all__'
