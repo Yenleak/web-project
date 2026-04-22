@@ -1,1 +1,39 @@
-<p>search works!</p>
+<div class="search-container">
+  <h1>Поиск задач</h1>
+
+  <div class="error" *ngIf="error">{{ error }}</div>
+
+  <div class="search-bar">
+    <input
+      [(ngModel)]="query"
+      name="query"
+      placeholder="Введите название или описание задачи..."
+      (keyup.enter)="loadAndSearch()"
+    />
+    <button (click)="loadAndSearch()">🔍 Найти</button>
+  </div>
+
+  <div class="search-results" *ngIf="searched">
+    <p class="results-count">Найдено: {{ results.length }}</p>
+
+    @for (task of results; track task.id) {
+      <div class="task-card" [class.completed]="task.is_completed" [class.overdue]="isOverdue(task)" (click)="openTask(task.id)">
+        <div class="task-top">
+          <span class="task-title">{{ task.title }}</span>
+          <span class="priority" [class]="task.priority">{{ task.priority }}</span>
+        </div>
+        <p *ngIf="task.description">{{ task.description }}</p>
+        <div class="task-meta">
+          <span *ngIf="task.deadline">📅 {{ task.deadline }}</span>
+          <span *ngIf="task.workspace_name">📁 {{ task.workspace_name }}</span>
+          <span class="overdue-badge" *ngIf="isOverdue(task)">⚠️ Просрочено</span>
+          <span class="done-badge" *ngIf="task.is_completed">✅ Выполнено</span>
+        </div>
+      </div>
+    } @empty {
+      <div class="empty-state">
+        <p>Ничего не найдено по запросу "{{ query }}"</p>
+      </div>
+    }
+  </div>
+</div>
