@@ -1,7 +1,6 @@
 <div class="detail-container" *ngIf="task">
 
-  <button (click)="router.navigate(['/tasks'])">← Назад</button>
-
+  <button (click)="goBack()">← Назад</button>
   <div class="overdue-banner" *ngIf="isOverdue()">
     ⚠️ Дедлайн истёк! Задача просрочена.
   </div>

@@ -10,7 +10,7 @@ import { AuthService } from '../../Services/auth';
   templateUrl: './home.html',
   styleUrl: './home.css'
 })
-export class HomeComponent {
+export class Home {
   constructor(public auth: AuthService, private router: Router) {}
 
   goToTasks() {

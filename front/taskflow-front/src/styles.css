@@ -1,1 +1,79 @@
-/* You can add global styles to this file, and also import other style files */
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Segoe UI', sans-serif;
+  background: #0f0f13;
+  color: #e2e2e2;
+  min-height: 100vh;
+}
+
+button {
+  cursor: pointer;
+  padding: 8px 16px;
+  border: none;
+  border-radius: 8px;
+  background: #6c63ff;
+  color: #fff;
+  font-size: 14px;
+  transition: background 0.2s;
+}
+
+button:hover { background: #574fd6; }
+
+button.secondary {
+  background: transparent;
+  border: 1px solid #6c63ff;
+  color: #6c63ff;
+}
+
+button.secondary:hover { background: #6c63ff22; }
+
+button.delete-btn {
+  background: #e53e3e;
+}
+
+button.delete-btn:hover { background: #c53030; }
+
+input, select, textarea {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid #2a2a3a;
+  border-radius: 8px;
+  background: #1a1a2e;
+  color: #e2e2e2;
+  font-size: 14px;
+  outline: none;
+  transition: border 0.2s;
+}
+
+input:focus, select:focus { border-color: #6c63ff; }
+
+.error {
+  background: #e53e3e22;
+  border: 1px solid #e53e3e;
+  color: #fc8181;
+  padding: 10px 14px;
+  border-radius: 8px;
+  margin-bottom: 16px;
+}
+
+.empty-state {
+  text-align: center;
+  padding: 48px;
+  color: #666;
+}
+
+.overdue { border-color: #e53e3e !important; }
+.overdue-badge {
+  color: #fc8181;
+  font-size: 12px;
+}
+
+.priority { font-size: 12px; padding: 2px 8px; border-radius: 99px; }
+.priority.low { background: #2d6a4f; color: #95d5b2; }
+.priority.medium { background: #7b4f00; color: #ffd166; }
+.priority.high { background: #6b1f1f; color: #fc8181; }

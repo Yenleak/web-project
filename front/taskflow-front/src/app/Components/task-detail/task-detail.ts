@@ -27,7 +27,7 @@ export class TaskDetail implements OnInit {
 
   constructor(
     private route: ActivatedRoute,
-    private router: Router,
+    protected router: Router,
     private taskService: TaskService
   ) {}
 
@@ -105,5 +105,8 @@ export class TaskDetail implements OnInit {
   isOverdue(): boolean {
     if (!this.task?.deadline || this.task.is_completed) return false;
     return new Date(this.task.deadline) < new Date();
+  }
+  goBack() {
+    this.router.navigate(['/tasks']);
   }
 }
