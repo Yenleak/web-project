@@ -13,6 +13,10 @@ export class WorkspaceService {
     return this.http.get<Workspace[]>(`${this.api}/workspaces/`);
   }
 
+  getWorkspace(id: number): Observable<Workspace> {
+    return this.http.get<Workspace>(`${this.api}/workspaces/${id}/`);
+  }
+
   createWorkspace(data: { name: string; deadline?: string }): Observable<Workspace> {
     return this.http.post<Workspace>(`${this.api}/workspaces/`, data);
   }
