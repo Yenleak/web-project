@@ -1,1 +1,64 @@
-<p>task-detail works!</p>
+<div class="detail-container" *ngIf="task">
+
+  <button (click)="router.navigate(['/tasks'])">← Назад</button>
+
+  <div class="overdue-banner" *ngIf="isOverdue()">
+    ⚠️ Дедлайн истёк! Задача просрочена.
+  </div>
+
+  <!-- Просмотр -->
+  <div *ngIf="!editing">
+    <div class="detail-header">
+      <h1>{{ task.title }}</h1>
+      <span class="priority" [class]="task.priority">{{ task.priority }}</span>
+    </div>
+    <p *ngIf="task.description">{{ task.description }}</p>
+    <p *ngIf="task.deadline">📅 Дедлайн: {{ task.deadline }}</p>
+    <p>Статус: {{ task.is_completed ? '✅ Выполнено' : '🕐 В процессе' }}</p>
+
+    <div class="detail-actions">
+      <button (click)="toggleTask()">{{ task.is_completed ? 'Отменить' : 'Выполнено' }}</button>
+      <button (click)="editing = true">✏️ Редактировать</button>
+      <button class="delete-btn" (click)="deleteTask()">🗑 Удалить</button>
+    </div>
+  </div>
+
+  <!-- Редактирование -->
+  <div *ngIf="editing">
+    <input [(ngModel)]="editData.title" name="title" placeholder="Название" />
+    <input [(ngModel)]="editData.description" name="description" placeholder="Описание" />
+    <input [(ngModel)]="editData.deadline" name="deadline" type="date" />
+    <select [(ngModel)]="editData.priority" name="priority">
+      <option value="low">Низкий</option>
+      <option value="medium">Средний</option>
+      <option value="high">Высокий</option>
+    </select>
+    <button (click)="saveEdit()">Сохранить</button>
+    <button (click)="editing = false">Отмена</button>
+  </div>
+
+  <!-- Подзадачи -->
+  <div class="subtasks">
+    <h3>Подзадачи</h3>
+
+    <div class="subtask-form">
+      <input [(ngModel)]="newSubtaskTitle" name="subtask" placeholder="Новая подзадача..." />
+      <button (click)="addSubtask()">Добавить</button>
+    </div>
+
+    @for (subtask of task.subtasks; track subtask.id) {
+      <div class="subtask-item" [class.done]="subtask.is_completed">
+        <span>{{ subtask.title }}</span>
+        <div>
+          <button (click)="toggleSubtask(subtask)">{{ subtask.is_completed ? '↩' : '✓' }}</button>
+          <button (click)="deleteSubtask(subtask.id)">🗑</button>
+        </div>
+      </div>
+    } @empty {
+      <p>Подзадач нет</p>
+    }
+  </div>
+
+</div>
+
+<div class="error" *ngIf="error">{{ error }}</div>
