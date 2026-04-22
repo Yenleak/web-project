@@ -1,317 +1,385 @@
+from datetime import date, timedelta
+from django.contrib.auth.models import User
+from django.db.models import Q
 from django.utils import timezone
-from rest_framework import status, generics
+
+from rest_framework import generics, status
 from rest_framework.decorators import api_view, permission_classes
-from rest_framework.permissions import IsAuthenticated, AllowAny
+from rest_framework.exceptions import ValidationError
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework_simplejwt.tokens import RefreshToken
 
-
-from django.contrib.auth import get_user_model
-
-from .models import Task, Workspace, Subtask
+from .models import Workspace, WorkspaceMember, Task, SubTask, TaskActivity, UserStats
 from .serializers import (
-    RegisterSerializer, TaskSerializer, TaskCreateSerializer,
-    WorkspaceSerializer, AddMembersSerializer, StatisticsSerializer, SubtaskSerializer,
+    RegisterSerializer, LoginSerializer,
+    WorkspaceSerializer, WorkspaceMemberSerializer,
+    TaskSerializer, SubTaskSerializer,
+    TaskActivitySerializer, UserStatsSerializer,
 )
 
-User = get_user_model()
+
+def is_workspace_admin(user, workspace):
+    return WorkspaceMember.objects.filter(workspace=workspace, user=user, role__in=['owner', 'admin']).exists()
 
 
-# AUTH  (Function-Based Views #1, #2) yeanleak
+def is_workspace_member(user, workspace):
+    return WorkspaceMember.objects.filter(workspace=workspace, user=user).exists()
 
-@api_view(["POST"])
+
+# ─── AUTH ─────────────────────────────────────────────────────────────────────
+
+@api_view(['POST'])
 @permission_classes([AllowAny])
 def register_view(request):
-    """
-    FBV #1 — Регистрация нового пользователя.
-    Возвращает JWT-токены сразу после создания аккаунта.
-    """
     serializer = RegisterSerializer(data=request.data)
     if serializer.is_valid():
         user = serializer.save()
-        refresh = RefreshToken.for_user(user)
+        workspace = Workspace.objects.create(
+            name=f"{user.username}'s Workspace",
+            description='Personal workspace',
+            created_by=user
+        )
+        WorkspaceMember.objects.create(
+            workspace=workspace, user=user, role='owner', added_by=user)
         return Response({
-            "user":    serializer.data,
-            "refresh": str(refresh),
-            "access":  str(refresh.access_token),
+            'message': 'User created successfully',
+            'username': user.username,
+            'workspace_id': workspace.id
         }, status=status.HTTP_201_CREATED)
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
-@api_view(["POST"])
+@api_view(['POST'])
+@permission_classes([AllowAny])
+def login_view(request):
+    serializer = LoginSerializer(data=request.data)
+    if serializer.is_valid():
+        user = serializer.validated_data['user']
+        refresh = RefreshToken.for_user(user)
+        return Response({
+            'refresh': str(refresh),
+            'access': str(refresh.access_token),
+            'username': user.username
+        })
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(['POST'])
 @permission_classes([IsAuthenticated])
 def logout_view(request):
-    """
-    FBV #2 — Логаут: инвалидируем refresh-токен,
-    добавляя его в чёрный список SimpleJWT.
-    """
-    try:
-        refresh_token = request.data["refresh"]
-        token = RefreshToken(refresh_token)
-        # требует 'rest_framework_simplejwt.token_blacklist' в INSTALLED_APPS
-        token.blacklist()
-        return Response({"detail": "Успешный выход."}, status=status.HTTP_205_RESET_CONTENT)
-    except Exception:
-        return Response({"detail": "Неверный токен."}, status=status.HTTP_400_BAD_REQUEST)
+    return Response({'message': 'Logout successful'})
 
 
-# TASKS  (Class-Based View — generics) sanzhar
+@api_view(['GET'])
+@permission_classes([IsAuthenticated])
+def profile_view(request):
+    return Response({
+        'id': request.user.id,
+        'username': request.user.username,
+        'email': request.user.email,
+        'workspace_count': WorkspaceMember.objects.filter(user=request.user).count()
+    })
 
-class TaskListCreateView(generics.ListCreateAPIView):
-    """
-    GET  /tasks/  — список задач текущего пользователя
-    POST /tasks/  — создать задачу (owner = request.user автоматически)
-    """
+
+# ─── WORKSPACE ────────────────────────────────────────────────────────────────
+
+class WorkspaceListCreateAPIView(generics.ListCreateAPIView):
+    serializer_class = WorkspaceSerializer
     permission_classes = [IsAuthenticated]
 
-    def get_serializer_class(self):
-        # Для чтения — подробный сериализатор с вложенными объектами
-        if self.request.method == "GET":
-            return TaskSerializer
-        return TaskCreateSerializer
-
     def get_queryset(self):
-        # Пользователь видит только свои задачи
-        queryset = Task.objects.filter(owner=self.request.user)
-
-        # 2. Проверяем, прислал ли фронтенд ID воркспейса в ссылке (например, /tasks/?workspace=3)
-        workspace_id = self.request.query_params.get('workspace')
-
-        # 3. Если ID есть, фильтруем задачи именно по этому воркспейсу
-        if workspace_id:
-            queryset = queryset.filter(workspace_id=workspace_id)
-        else:
-            queryset = Task.objects.filter(
-                assigned_to=self.request.user, workspace__isnull=True)
-
-        return queryset.select_related("assigned_to", "workspace").prefetch_related("subtasks")
+        workspace_ids = WorkspaceMember.objects.filter(
+            user=self.request.user).values_list('workspace_id', flat=True)
+        return Workspace.objects.filter(id__in=workspace_ids)
 
     def perform_create(self, serializer):
-        assigned_to = serializer.validated_data.get('assigned_to')
-
-        # если задача никому не дана(не указано) значит это задача самого пользователя
-        if not assigned_to:
-            serializer.save(owner=self.request.user,
-                            assigned_to=self.request.user)
-        else:
-            serializer.save(owner=self.request.user)
+        workspace = serializer.save(created_by=self.request.user)
+        WorkspaceMember.objects.create(
+            workspace=workspace, user=self.request.user, role='owner', added_by=self.request.user)
 
 
-class SubtaskListCreateView(generics.ListCreateAPIView):
-    queryset = Subtask.objects.all()
-    serializer_class = SubtaskSerializer
+class WorkspaceDetailAPIView(generics.RetrieveUpdateDestroyAPIView):
+    serializer_class = WorkspaceSerializer
     permission_classes = [IsAuthenticated]
-
-
-class SubtaskDetailView(generics.RetrieveUpdateDestroyAPIView):
-    queryset = Subtask.objects.all()
-    serializer_class = SubtaskSerializer
-    permission_classes = [IsAuthenticated]
-
-
-class TaskDetailView(generics.RetrieveUpdateDestroyAPIView):
-    """
-    GET    /tasks/<pk>/  — получить задачу
-    PUT    /tasks/<pk>/  — полное обновление
-    PATCH  /tasks/<pk>/  — частичное обновление
-    DELETE /tasks/<pk>/  — удалить задачу
-    """
-    permission_classes = [IsAuthenticated]
-
-    def get_serializer_class(self):
-        if self.request.method == "GET":
-            return TaskSerializer
-        return TaskCreateSerializer
 
     def get_queryset(self):
-        # Запрещаем редактировать чужие задачи
-        return Task.objects.filter(owner=self.request.user)
+        workspace_ids = WorkspaceMember.objects.filter(
+            user=self.request.user).values_list('workspace_id', flat=True)
+        return Workspace.objects.filter(id__in=workspace_ids)
+
+    def destroy(self, request, *args, **kwargs):
+        workspace = self.get_object()
+        if workspace.created_by != request.user:
+            return Response({'error': 'Only owner can delete workspace'}, status=status.HTTP_403_FORBIDDEN)
+        workspace.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
 
 
-# TASKS — FBV-эндпоинты для быстрых действий
-
-@api_view(["PATCH"])
-@permission_classes([IsAuthenticated])
-def toggle_task_status(request, pk):
-    """
-    FBV #3 — Быстрое переключение статуса задачи (выполнена / не выполнена).
-    PATCH /tasks/<pk>/toggle/
-    Не требует тела запроса — просто инвертирует is_completed.
-    """
-    try:
-        task = Task.objects.get(pk=pk, owner=request.user)
-    except Task.DoesNotExist:
-        return Response({"detail": "Задача не найдена."}, status=status.HTTP_404_NOT_FOUND)
-
-    task.is_completed = not task.is_completed
-    task.save()  # сигнал в model.save() выставит completed_at
-
-    return Response({
-        "id":           task.id,
-        "is_completed": task.is_completed,
-        "completed_at": task.completed_at,
-    })
-
-
-@api_view(["PATCH"])
-@permission_classes([IsAuthenticated])
-def toggle_subtask_status(request, pk):
-    """
-    FBV #4 — Быстрое переключение статуса подзадачи.
-    PATCH /subtasks/<pk>/toggle/
-    """
-    try:
-        # Проверяем, что подзадача принадлежит задаче текущего пользователя
-        subtask = Subtask.objects.select_related("task__owner").get(
-            pk=pk, task__owner=request.user
-        )
-    except Subtask.DoesNotExist:
-        return Response({"detail": "Подзадача не найдена."}, status=status.HTTP_404_NOT_FOUND)
-
-    subtask.is_completed = not subtask.is_completed
-    subtask.save()
-
-    return Response({
-        "id":           subtask.id,
-        "is_completed": subtask.is_completed,
-    })
-
-
-# WORKSPACES  (APIView — CBV #1)
-
-class WorkspaceView(APIView):
-    """
-    CBV #1 на основе APIView.
-    GET  /workspaces/  — воркспейсы, где пользователь является участником или создателем
-    POST /workspaces/  — создать новый воркспейс
-    """
+class WorkspaceMemberListCreateAPIView(generics.ListCreateAPIView):
+    serializer_class = WorkspaceMemberSerializer
     permission_classes = [IsAuthenticated]
 
-    def get(self, request):
-        workspaces = Workspace.objects.filter(
-            members=request.user
-        ).union(
-            Workspace.objects.filter(creator=request.user)
-        )
-        serializer = WorkspaceSerializer(workspaces, many=True)
-        return Response(serializer.data)
+    def get_queryset(self):
+        workspace_id = self.kwargs['workspace_id']
+        return WorkspaceMember.objects.filter(workspace_id=workspace_id)
 
-    def post(self, request):
-        serializer = WorkspaceSerializer(data=request.data)
-        if serializer.is_valid():
-            # Создатель — текущий пользователь
-            workspace = serializer.save(creator=request.user)
-            # Создатель автоматически добавляется в участники
-            workspace.members.add(request.user)
-            return Response(
-                WorkspaceSerializer(workspace).data,
-                status=status.HTTP_201_CREATED
-            )
-        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
-
-
-class WorkspaceAddMembersView(APIView):
-    """
-    CBV — Добавление участников в воркспейс.
-    POST /workspaces/<pk>/add-members/
-    Тело: { "user_ids": [1, 2, 3] }
-    """
-    permission_classes = [IsAuthenticated]
-
-    def post(self, request, pk):
+    def create(self, request, workspace_id):
         try:
-            # Добавлять участников может только создатель воркспейса
-            workspace = Workspace.objects.get(pk=pk)
+            workspace = Workspace.objects.get(pk=workspace_id)
         except Workspace.DoesNotExist:
-            return Response(
-                {"detail": "Воркспейс не найден или нет прав."},
-                status=status.HTTP_404_NOT_FOUND
+            return Response({'error': 'Workspace not found'}, status=status.HTTP_404_NOT_FOUND)
+        if not is_workspace_admin(request.user, workspace):
+            return Response({'error': 'Only owner/admin can add members'}, status=status.HTTP_403_FORBIDDEN)
+        username = request.data.get('username')
+        role = request.data.get('role', 'member')
+        try:
+            user_to_add = User.objects.get(username=username)
+        except User.DoesNotExist:
+            return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
+        if WorkspaceMember.objects.filter(workspace=workspace, user=user_to_add).exists():
+            return Response({'error': 'User already in workspace'}, status=status.HTTP_400_BAD_REQUEST)
+        member = WorkspaceMember.objects.create(
+            workspace=workspace, user=user_to_add, role=role, added_by=request.user)
+        TaskActivity.objects.create(
+            workspace=workspace,
+            user=request.user,
+            action='member_added',
+            message=f'{request.user.username} added {user_to_add.username} to workspace'
+        )
+        return Response(WorkspaceMemberSerializer(member).data, status=status.HTTP_201_CREATED)
+
+
+# ─── TASK ─────────────────────────────────────────────────────────────────────
+
+class TaskListCreateAPIView(generics.ListCreateAPIView):
+    serializer_class = TaskSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        # сбрасываем recurring таски у которых пришло время
+        Task.objects.filter(
+            is_recurring=True,
+            status='done',
+            next_occurrence__lte=date.today()
+        ).update(status='not_done')
+
+        workspace_id = self.request.GET.get('workspace')
+        if workspace_id is None or workspace_id == '':
+            qs = Task.objects.filter(
+                created_by=self.request.user, workspace__isnull=True)
+        else:
+            qs = Task.objects.filter(
+                workspace_id=workspace_id,
+                workspace__memberships__user=self.request.user
+            ).distinct()
+
+        status_filter = self.request.GET.get('status')
+        priority_filter = self.request.GET.get('priority')
+        search = self.request.GET.get('search')
+
+        if status_filter:
+            qs = qs.filter(status=status_filter)
+        if priority_filter:
+            qs = qs.filter(priority=priority_filter)
+        if search:
+            qs = qs.filter(Q(title__icontains=search) |
+                           Q(description__icontains=search))
+        return qs
+
+    def perform_create(self, serializer):
+        workspace_id = self.request.data.get('workspace')
+        workspace = None
+        if workspace_id:
+            try:
+                workspace = Workspace.objects.get(pk=workspace_id)
+            except Workspace.DoesNotExist:
+                pass
+        task = serializer.save(created_by=self.request.user)
+        if task.workspace:
+            TaskActivity.objects.create(
+                workspace=task.workspace,
+                task=task,
+                user=self.request.user,
+                action='task_created',
+                message=f'{self.request.user.username} created task "{task.title}"'
             )
 
-        email = request.data.get('email')
 
-        if not email:
-            return Response({"error": "Email обязателен для приглашения."}, status=status.HTTP_400_BAD_REQUEST)
+class TaskDetailAPIView(generics.RetrieveUpdateDestroyAPIView):
+    serializer_class = TaskSerializer
+    permission_classes = [IsAuthenticated]
 
-        # 2. Ищем пользователя по этому email в базе
-        try:
-            user = User.objects.get(email=email)
+    def get_queryset(self):
+        return Task.objects.filter(
+            Q(created_by=self.request.user, workspace__isnull=True) |
+            Q(workspace__memberships__user=self.request.user)
+        ).distinct()
 
-            # 3. Добавляем пользователя в воркспейс
-            # ВНИМАНИЕ: Замени 'members' на то название, которое используется у тебя в модели Workspace (например, users, participants и т.д.)
-            workspace.members.add(user)
+    def update(self, request, *args, **kwargs):
+        partial = kwargs.pop('partial', False)
+        instance = self.get_object()
+        new_status = request.data.get('status')
 
-            return Response({"message": "Пользователь успешно добавлен!"}, status=status.HTTP_200_OK)
+        if new_status == 'done' and instance.subtasks.filter(status='not_done').exists():
+            raise ValidationError(
+                'Finish all subtasks before completing the task')
 
-        except User.DoesNotExist:
-            # Если такого email нет в базе, возвращаем понятную ошибку
-            return Response({"error": "Пользователь с таким email не найден."}, status=status.HTTP_404_NOT_FOUND)
+        serializer = self.get_serializer(
+            instance, data=request.data, partial=partial)
+        serializer.is_valid(raise_exception=True)
+        updated_task = serializer.save()
+
+        if updated_task.due_date and updated_task.due_date < date.today() and updated_task.status != 'done':
+            updated_task.status = 'overdue'
+            updated_task.save()
+
+        if new_status == 'done':
+            updated_task.completed_by = request.user
+            updated_task.completed_at = timezone.now()
+            if updated_task.is_recurring:
+                if updated_task.repeat_type == 'daily':
+                    updated_task.next_occurrence = date.today() + timedelta(days=1)
+                elif updated_task.repeat_type == 'weekly':
+                    updated_task.next_occurrence = date.today() + timedelta(weeks=1)
+                elif updated_task.repeat_type == 'monthly':
+                    updated_task.next_occurrence = date.today() + timedelta(days=30)
+                elif updated_task.repeat_type == 'custom' and updated_task.repeat_every_days:
+                    updated_task.next_occurrence = date.today(
+                    ) + timedelta(days=updated_task.repeat_every_days)
+            updated_task.save()
+            if updated_task.workspace:
+                TaskActivity.objects.create(
+                    workspace=updated_task.workspace,
+                    task=updated_task,
+                    user=request.user,
+                    action='task_completed',
+                    message=f'{request.user.username} completed task "{updated_task.title}"'
+                )
+
+        return Response(self.get_serializer(updated_task).data)
+
+    def perform_update(self, serializer):
+        serializer.save()
 
 
-# STATISTICS  (APIView — CBV #2)
+# ─── SUBTASK ──────────────────────────────────────────────────────────────────
 
-class UserStatisticsView(APIView):
-    """
-    CBV #2 на основе APIView.
-    GET /statistics/
-    Возвращает статистику по задачам текущего пользователя:
-    - выполнено в срок
-    - выполнено с просрочкой
-    - в ожидании
-    - процент выполнения
-    """
+class SubTaskListCreateAPIView(generics.ListCreateAPIView):
+    serializer_class = SubTaskSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        qs = SubTask.objects.filter(
+            Q(task__created_by=self.request.user, task__workspace__isnull=True) |
+            Q(task__workspace__memberships__user=self.request.user)
+        ).distinct()
+        task_id = self.request.GET.get('task')
+        if task_id:
+            qs = qs.filter(task_id=task_id)
+        return qs
+
+    def perform_create(self, serializer):
+        serializer.save(created_by=self.request.user)
+
+
+class SubTaskDetailAPIView(generics.RetrieveUpdateDestroyAPIView):
+    serializer_class = SubTaskSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        return SubTask.objects.filter(
+            Q(task__created_by=self.request.user, task__workspace__isnull=True) |
+            Q(task__workspace__memberships__user=self.request.user)
+        ).distinct()
+
+    def perform_update(self, serializer):
+        updated_subtask = serializer.save()
+        if self.request.data.get('status') == 'done':
+            updated_subtask.completed_by = self.request.user
+            updated_subtask.completed_at = timezone.now()
+            updated_subtask.save()
+            if updated_subtask.task.workspace:
+                TaskActivity.objects.create(
+                    workspace=updated_subtask.task.workspace,
+                    task=updated_subtask.task,
+                    subtask=updated_subtask,
+                    user=self.request.user,
+                    action='subtask_completed',
+                    message=f'{self.request.user.username} completed subtask "{updated_subtask.title}"'
+                )
+
+
+# ─── ACTIVITY ─────────────────────────────────────────────────────────────────
+
+class ActivityListAPIView(generics.ListAPIView):
+    serializer_class = TaskActivitySerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        qs = TaskActivity.objects.filter(
+            workspace__memberships__user=self.request.user).distinct()
+        workspace_id = self.request.GET.get('workspace')
+        if workspace_id:
+            qs = qs.filter(workspace_id=workspace_id)
+        return qs.order_by('-created_at')
+
+
+# ─── STATISTICS ───────────────────────────────────────────────────────────────
+
+class StatisticsAPIView(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        user_tasks = Task.objects.filter(owner=request.user)
+        period = request.GET.get('period', 'week')
+        date_from_param = request.GET.get('date_from')
+        date_to_param = request.GET.get('date_to')
+        today = date.today()
 
-        total = user_tasks.count()
+        if period == '3days':
+            date_from, date_to = today - timedelta(days=3), today
+        elif period == 'week':
+            date_from, date_to = today - timedelta(weeks=1), today
+        elif period == 'month':
+            date_from, date_to = today - timedelta(days=30), today
+        elif period == 'custom' and date_from_param and date_to_param:
+            date_from = date.fromisoformat(date_from_param)
+            date_to = date.fromisoformat(date_to_param)
+        else:
+            date_from, date_to = today - timedelta(weeks=1), today
 
-        # Выполнено В СРОК: задача закрыта, и дедлайн либо не указан,
-        # либо completed_at <= дедлайн (конец дня)
-        completed_on_time = user_tasks.filter(
-            is_completed=True
-        ).filter(
-            # completed_at <= deadline (date → datetime конвертация через __date)
-            completed_at__date__lte=models_deadline_lte()
-        ).count()
+        all_tasks = Task.objects.filter(
+            Q(created_by=request.user, workspace__isnull=True) |
+            Q(workspace__memberships__user=request.user)
+        ).distinct()
 
-        # Выполнено С ПРОСРОЧКОЙ: закрыта, но позже дедлайна
-        completed_overdue = user_tasks.filter(
-            is_completed=True,
-            deadline__isnull=False,
-            completed_at__date__gt=_task_deadline_field()
-        ).count()
-
-        pending = user_tasks.filter(is_completed=False).count()
-
-        completion_rate = round(
-            (completed_on_time + completed_overdue) / total * 100, 1) if total else 0.0
+        period_tasks = all_tasks.filter(
+            created_at__date__gte=date_from, created_at__date__lte=date_to)
 
         data = {
-            "total_tasks":         total,
-            "completed_on_time":   completed_on_time,
-            "completed_overdue":   completed_overdue,
-            "pending":             pending,
-            "completion_rate_pct": completion_rate,
+            'period': period,
+            'date_from': str(date_from),
+            'date_to': str(date_to),
+            'total_tasks': period_tasks.count(),
+            'completed_tasks': period_tasks.filter(status='done').count(),
+            'overdue_tasks': period_tasks.filter(Q(status='overdue') | Q(due_date__lt=today, status='not_done')).count(),
+            'recurring_tasks': period_tasks.filter(is_recurring=True).count(),
+            'today_tasks': all_tasks.filter(priority='today').count(),
+            'upcoming_tasks': all_tasks.filter(priority='upcoming').count(),
         }
 
-        serializer = StatisticsSerializer(data)
-        return Response(serializer.data)
+        UserStats.objects.create(
+            user=request.user,
+            period=period if period in [
+                '3days', 'week', 'month', 'custom'] else 'week',
+            date_from=date_from,
+            date_to=date_to,
+            total_tasks=data['total_tasks'],
+            completed_tasks=data['completed_tasks'],
+            overdue_tasks=data['overdue_tasks'],
+            recurring_tasks=data['recurring_tasks'],
+            created_tasks=data['total_tasks'],
+        )
 
-
-# ── Вспомогательные функции для ORM-фильтров статистики ──────────────────────
-
-from django.db.models import F  # noqa — импорт ниже для читаемости
-
-
-def models_deadline_lte():
-    """Возвращает выражение: completed_at.date <= deadline."""
-    # Используется как фильтр: completed_at__date__lte=F('deadline')
-    return F("deadline")
-
-
-def _task_deadline_field():
-    """Возвращает выражение для сравнения completed_at > deadline."""
-    return F("deadline")
+        return Response(data)
