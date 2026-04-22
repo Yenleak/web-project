@@ -1,1 +1,49 @@
-<p>statistics works!</p>
+<div class="stats-container">
+  <h1>Статистика</h1>
+
+  <div class="error" *ngIf="error">{{ error }}</div>
+
+  <!-- Фильтры -->
+  <div class="filters">
+    <button [class.active]="activeFilter === '1'" (click)="setFilter('1')">Сегодня</button>
+    <button [class.active]="activeFilter === '3'" (click)="setFilter('3')">3 дня</button>
+    <button [class.active]="activeFilter === '7'" (click)="setFilter('7')">7 дней</button>
+    <button [class.active]="activeFilter === 'custom'" (click)="setFilter('custom')">Кастомный</button>
+  </div>
+
+  <!-- Кастомный диапазон -->
+  <div class="custom-range" *ngIf="activeFilter === 'custom'">
+    <input [(ngModel)]="customFrom" name="from" type="date" />
+    <span>—</span>
+    <input [(ngModel)]="customTo" name="to" type="date" />
+    <button (click)="loadCustom()">Применить</button>
+  </div>
+
+  <!-- Карточки статистики -->
+  <div class="stats-grid" *ngIf="stats">
+    <div class="stat-card">
+      <span class="stat-value">{{ stats.total_tasks }}</span>
+      <span class="stat-label">Всего задач</span>
+    </div>
+    <div class="stat-card success">
+      <span class="stat-value">{{ stats.completed_on_time }}</span>
+      <span class="stat-label">Выполнено в срок</span>
+    </div>
+    <div class="stat-card warning">
+      <span class="stat-value">{{ stats.completed_overdue }}</span>
+      <span class="stat-label">Выполнено с просрочкой</span>
+    </div>
+    <div class="stat-card danger">
+      <span class="stat-value">{{ stats.pending }}</span>
+      <span class="stat-label">В ожидании</span>
+    </div>
+    <div class="stat-card highlight">
+      <span class="stat-value">{{ stats.completion_rate_pct }}%</span>
+      <span class="stat-label">Процент выполнения</span>
+    </div>
+  </div>
+
+  <div class="empty-state" *ngIf="!stats && !error">
+    <p>Загрузка...</p>
+  </div>
+</div>
